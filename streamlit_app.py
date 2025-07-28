@@ -294,8 +294,11 @@ def display_draft_emails(draft_emails, event_info):
                         agent = initialize_agent()
                         if agent:
                             with st.spinner(f"Sending email to {restaurant.get('name', 'restaurant')}..."):
-                                # Extract subject and body from email content
-                                lines = email_content.split('\n')
+                                # Get the edited email content from the text area widget
+                                edited_email_content = st.session_state.get(f"email_{i}", email_content)
+                                
+                                # Extract subject and body from edited email content
+                                lines = edited_email_content.split('\n')
                                 subject_line = None
                                 body_lines = []
                                 
@@ -399,8 +402,12 @@ def display_draft_emails(draft_emails, event_info):
                     results = []
                     
                     for i, email_info in enumerate(emails_with_addresses):
-                        # Extract subject and body
-                        lines = email_info['email'].split('\n')
+                        # Get the edited email content from the text area widget
+                        original_index = email_info['index']
+                        edited_email_content = st.session_state.get(f"email_{original_index}", email_info['email'])
+                        
+                        # Extract subject and body from edited content
+                        lines = edited_email_content.split('\n')
                         subject_line = None
                         body_lines = []
                         
