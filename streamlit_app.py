@@ -19,6 +19,7 @@ print(f"🔍 DEBUG: Python path: {os.path.dirname(os.__file__)}")
 # Check environment variables with debugging
 vertex_project_id = os.getenv('VERTEX_PROJECT_ID')
 google_maps_api_key = os.getenv('GOOGLE_MAPS_API_KEY')
+os.environ["STREAMLIT_WATCHER_TYPE"] = "none"
 print(f"🔍 DEBUG: VERTEX_PROJECT_ID found: {bool(vertex_project_id)}")
 print(f"🔍 DEBUG: GOOGLE_MAPS_API_KEY found: {bool(google_maps_api_key)}")
 
