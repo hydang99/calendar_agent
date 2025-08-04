@@ -497,6 +497,9 @@ def display_draft_emails(draft_emails, event_info):
 
 def main():
     """Main Streamlit application."""
+    # Ensure os is available in function scope
+    import os as _os
+    
     # Header
     st.markdown('<div class="main-header">🎉 Event Agent Demo</div>', unsafe_allow_html=True)
     st.markdown(
@@ -513,8 +516,8 @@ def main():
         st.markdown("## ⚙️ Configuration")
         
         # Check API status
-        vertex_project_id = os.getenv('VERTEX_PROJECT_ID') or st.secrets.get('VERTEX_PROJECT_ID', '')
-        google_maps_api_key = os.getenv('GOOGLE_MAPS_API_KEY') or st.secrets.get('GOOGLE_MAPS_API_KEY', '')
+        vertex_project_id = _os.getenv('VERTEX_PROJECT_ID') or st.secrets.get('VERTEX_PROJECT_ID', '')
+        google_maps_api_key = _os.getenv('GOOGLE_MAPS_API_KEY') or st.secrets.get('GOOGLE_MAPS_API_KEY', '')
         
         # API Status
         st.markdown("### 🔑 API Status")
@@ -591,8 +594,8 @@ def main():
         
         # Check if API keys are available for button state
         api_keys_available = bool(
-            (os.getenv('VERTEX_PROJECT_ID') or st.secrets.get('VERTEX_PROJECT_ID', '')) and
-            (os.getenv('GOOGLE_MAPS_API_KEY') or st.secrets.get('GOOGLE_MAPS_API_KEY', ''))
+            (_os.getenv('VERTEX_PROJECT_ID') or st.secrets.get('VERTEX_PROJECT_ID', '')) and
+            (_os.getenv('GOOGLE_MAPS_API_KEY') or st.secrets.get('GOOGLE_MAPS_API_KEY', ''))
         )
         
         process_button = st.button(
