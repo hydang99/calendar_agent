@@ -2,6 +2,7 @@ import os
 import re
 import json
 import time
+import platform
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -56,7 +57,6 @@ class EventAgent:
         if self.vertex_project_id:
             try:
                 # Explicitly set project for Google Cloud libraries
-                import os
                 os.environ["GOOGLE_CLOUD_PROJECT"] = self.vertex_project_id
                 
                 # Initialize with just project and location - staging bucket is optional
@@ -680,8 +680,6 @@ class EventAgent:
             Dictionary containing extracted event information
         """
         # Enhanced cloud environment detection
-        import os
-        import platform
         
         # Multiple ways to detect cloud/containerized environments
         cloud_indicators = [
