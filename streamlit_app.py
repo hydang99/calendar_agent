@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import os
+import platform
 from datetime import datetime
 from event_agent import EventAgent
 import pandas as pd
@@ -12,44 +13,17 @@ load_dotenv(override=True)
 
 # Handle Google Cloud authentication for Streamlit Cloud deployment
 try:
-    import json
-    from google.oauth2 import service_account
-    
-    # Check if running on Streamlit Cloud with service account
-    if "gcp_service_account" in st.secrets:
-        # Running on Streamlit Cloud - use service account from secrets
-        credentials = service_account.Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"]
-        )
+    # Force Google Cloud to NOT use metadata service in Streamlit Cloud
+    # This prevents the 503 metadata service error  
+    if '/mount/src/' in os.getcwd():
+        # We're in Streamlit Cloud - disable metadata service
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = ""
+        os.environ["GOOGLE_CLOUD_PROJECT"] = os.getenv('VERTEX_PROJECT_ID', '')
+        print("🔧 Streamlit Cloud detected - disabled metadata service")
         
-        # Write credentials to a temporary file for Vertex AI to use
-        with open("service-account-key.json", "w") as f:
-            json.dump(dict(st.secrets["gcp_service_account"]), f)
-        
-        # Set environment variable for Google Cloud libraries
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "service-account-key.json"
-    else:
-        # Force Google Cloud to NOT use metadata service in Streamlit Cloud
-        # This prevents the 503 metadata service error
-        if any(key in os.environ for key in ['STREAMLIT_SHARING_MODE', 'STREAMLIT_CLOUD']) or '/mount/src/' in os.getcwd():
-            # We're in Streamlit Cloud - disable metadata service
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = ""
-            os.environ["GOOGLE_CLOUD_PROJECT"] = os.getenv('VERTEX_PROJECT_ID', '')
-        
-except ImportError:
-    # google.oauth2 not available - will use environment-based auth
-    pass
 except Exception as auth_error:
     # Log but don't fail - will fall back to environment variables
-    print(f"Note: Service account setup failed, using environment auth: {auth_error}")
-    
-    # Still try to disable metadata service in cloud
-    try:
-        if '/mount/src/' in os.getcwd():
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = ""
-            os.environ["GOOGLE_CLOUD_PROJECT"] = os.getenv('VERTEX_PROJECT_ID', '')
-    except:
-        pass
+    print(f"Note: Auth setup note: {auth_error}")
 
 # Set page config
 st.set_page_config(
@@ -648,28 +622,7 @@ def main():
             progress_bar.progress(25)
             
             with st.spinner("Analyzing event page..."):
-                try:
-                    # Add debug info for cloud deployments
-                    st.info("🔍 **Debug Info** (remove this later)")
-                    import platform
-                    debug_info = f"""
-                    - Platform: {platform.system()}
-                    - Working Directory: {os.getcwd()}
-                    - Environment: {'Cloud' if any(key in os.environ for key in ['STREAMLIT_SHARING_MODE', 'STREAMLIT_CLOUD']) else 'Local'}
-                    """
-                    st.code(debug_info)
-                    
-                    event_info = agent.extract_event_info(event_url)
-                    
-                    if 'error' in event_info:
-                        st.error(f"❌ Event extraction failed: {event_info['error']}")
-                        st.stop()
-                        
-                except Exception as e:
-                    st.error(f"❌ Unexpected error during event extraction: {str(e)}")
-                    st.error(f"Error type: {type(e).__name__}")
-                    st.code(f"Full error: {repr(e)}")
-                    st.stop()
+                event_info = agent.extract_event_info(event_url)
             
             if 'error' in event_info:
                 st.error(f"Failed to extract event information: {event_info['error']}")
