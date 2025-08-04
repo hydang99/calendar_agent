@@ -1091,6 +1091,7 @@ class EventAgent:
         try:
             print("🔍 Sending content to AI for analysis...")
             response = self.llm.invoke(prompt)
+            print(response)
             print(f"🤖 AI response received ({len(response)} characters)")
             
             # Try to extract JSON from response
