@@ -19,22 +19,7 @@ def install_requirements():
         return False
 
 def setup_environment():
-    """Setup environment file."""
-    print("⚙️ Setting up environment...")
-    
-    if not os.path.exists('.env'):
-        if os.path.exists('.env.example'):
-            import shutil
-            shutil.copy('.env.example', '.env')
-            print("✅ Created .env file from template")
-            print("🔧 Please edit .env file with your API credentials")
-        else:
-            print("⚠️ No .env.example found, creating basic .env file")
-            with open('.env', 'w') as f:
-                f.write("VERTEX_PROJECT_ID=your-google-cloud-project-id\n")
-                f.write("GOOGLE_MAPS_API_KEY=your-google-maps-api-key\n")
-    else:
-        print("ℹ️ .env file already exists")
+    return None
 
 def check_dependencies():
     """Check if all dependencies are available."""

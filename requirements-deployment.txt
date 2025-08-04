@@ -1,0 +1,18 @@
+# Production deployment requirements
+# Optimized for cloud deployment with minimal dependencies
+
+google-cloud-aiplatform>=1.38.0
+selenium>=4.15.0
+webdriver-manager>=4.0.1
+streamlit>=1.28.0
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+googlemaps>=4.10.0
+python-dotenv>=1.0.0
+lxml>=4.9.0
+pandas>=2.1.0
+langchain>=0.0.350
+langchain-google-vertexai>=0.1.0
+
+# Note: chromadb removed for deployment as it's not used in the main app
+# If you need it for other features, add it back

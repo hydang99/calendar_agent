@@ -18,10 +18,11 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-from google.cloud import aiplatform
 from langchain_google_vertexai import VertexAI
 import googlemaps
 from dotenv import load_dotenv
+import vertexai 
+from vertexai import agent_engines 
 
 load_dotenv()
 
@@ -33,24 +34,32 @@ class EventAgent:
     
     def __init__(self, 
                  vertex_project_id: str = None,
-                 vertex_location: str = "us-central1",
+                 vertex_location: str = None,
+                 bucket_name: str = None,
                  google_maps_api_key: str = None):
         """
         Initialize the EventAgent with required API credentials.
         
         Args:
             vertex_project_id: Google Cloud project ID for Vertex AI
-            vertex_location: Vertex AI location
+            vertex_location: Vertex AI location (must be a supported region)
             google_maps_api_key: Google Maps API key for restaurant search
         """
         self.vertex_project_id = vertex_project_id or os.getenv('VERTEX_PROJECT_ID')
-        self.vertex_location = vertex_location
+        # Use a supported Vertex AI region - us-east1 is widely available
+        self.vertex_location = vertex_location or os.getenv('VERTEX_LOCATION', 'us-east1')
+        self.bucket_name = bucket_name or os.getenv('BUCKET_NAME')
+
         self.google_maps_api_key = google_maps_api_key or os.getenv('GOOGLE_MAPS_API_KEY')
         
         # Initialize Vertex AI
         if self.vertex_project_id:
             try:
-                aiplatform.init(project=self.vertex_project_id, location=self.vertex_location)
+                # Initialize with just project and location - staging bucket is optional
+                if self.bucket_name:
+                    vertexai.init(project=self.vertex_project_id, location=self.vertex_location, staging_bucket=f"gs://{self.bucket_name}")
+                else:
+                    vertexai.init(project=self.vertex_project_id, location=self.vertex_location)
                 # Try different model names in order of preference
                 model_names = [
                     "gemini-2.0-flash",
@@ -80,7 +89,9 @@ class EventAgent:
         # Initialize Google Maps client
         if self.google_maps_api_key:
             self.gmaps = googlemaps.Client(key=self.google_maps_api_key)
-        
+        else:
+            self.gmaps = None
+
         # Set up Chrome driver for web scraping
         self.driver = None
         

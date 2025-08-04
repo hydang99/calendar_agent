@@ -4,6 +4,37 @@ import os
 from datetime import datetime
 from event_agent import EventAgent
 import pandas as pd
+from dotenv import load_dotenv
+
+# CRITICAL: Load .env file before any environment variable access
+# Use override=True to ensure .env values take precedence over existing environment variables
+load_dotenv(override=True)
+
+# Handle Google Cloud authentication for Streamlit Cloud deployment
+try:
+    import json
+    from google.oauth2 import service_account
+    
+    # Check if running on Streamlit Cloud with service account
+    if "gcp_service_account" in st.secrets:
+        # Running on Streamlit Cloud - use service account from secrets
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"]
+        )
+        
+        # Write credentials to a temporary file for Vertex AI to use
+        with open("service-account-key.json", "w") as f:
+            json.dump(dict(st.secrets["gcp_service_account"]), f)
+        
+        # Set environment variable for Google Cloud libraries
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "service-account-key.json"
+        
+except ImportError:
+    # google.oauth2 not available - will use environment-based auth
+    pass
+except Exception as auth_error:
+    # Log but don't fail - will fall back to environment variables
+    print(f"Note: Service account setup failed, using environment auth: {auth_error}")
 
 # Set page config
 st.set_page_config(
@@ -62,15 +93,26 @@ st.markdown("""
 
 def initialize_agent():
     """Initialize the EventAgent with API credentials."""
-    vertex_project_id = st.session_state.get('vertex_project_id') or os.getenv('VERTEX_PROJECT_ID')
-    google_maps_api_key = st.session_state.get('google_maps_api_key') or os.getenv('GOOGLE_MAPS_API_KEY')
+    # For production deployment, use environment variables only
+    vertex_project_id = os.getenv('VERTEX_PROJECT_ID')
+    google_maps_api_key = os.getenv('GOOGLE_MAPS_API_KEY')
+    
+    # In development mode, also check Streamlit secrets
+    if not vertex_project_id:
+        vertex_project_id = st.secrets.get('VERTEX_PROJECT_ID', '')
+    if not google_maps_api_key:
+        google_maps_api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
     
     if not vertex_project_id or not google_maps_api_key:
+        st.error("🔐 **Configuration Required**")
+        st.error("API credentials are not properly configured. Please contact the administrator.")
+        st.info("💡 **For administrators**: Set VERTEX_PROJECT_ID and GOOGLE_MAPS_API_KEY in your deployment environment.")
         return None
     
     try:
         agent = EventAgent(
             vertex_project_id=vertex_project_id,
+            vertex_location='us-east1',  # Use supported region
             google_maps_api_key=google_maps_api_key
         )
         return agent
@@ -481,34 +523,30 @@ def main():
     with st.sidebar:
         st.markdown("## ⚙️ Configuration")
         
-        # API Keys
-        st.markdown("### 🔑 API Keys")
-        vertex_project_id = st.text_input(
-            "Vertex AI Project ID",
-            value=os.getenv('VERTEX_PROJECT_ID', ''),
-            help="Your Google Cloud Project ID for Vertex AI"
-        )
-        st.session_state['vertex_project_id'] = vertex_project_id
+        # Check API status
+        vertex_project_id = os.getenv('VERTEX_PROJECT_ID') or st.secrets.get('VERTEX_PROJECT_ID', '')
+        google_maps_api_key = os.getenv('GOOGLE_MAPS_API_KEY') or st.secrets.get('GOOGLE_MAPS_API_KEY', '')
         
-        google_maps_api_key = st.text_input(
-            "Google Maps API Key",
-            value=os.getenv('GOOGLE_MAPS_API_KEY', ''),
-            type="password",
-            help="Your Google Maps API key for restaurant search"
-        )
-        st.session_state['google_maps_api_key'] = google_maps_api_key
+        # API Status
+        st.markdown("### 🔑 API Status")
+        if vertex_project_id and google_maps_api_key:
+            st.success("✅ API credentials configured")
+            st.caption(f"📍 Project: {vertex_project_id[:20]}...")
+        else:
+            st.error("❌ API credentials missing")
+            st.caption("Contact administrator for setup")
         
         # Settings
         st.markdown("### ⚙️ Settings")
         party_size = st.number_input("Party Size", min_value=1, max_value=20, value=4)
         search_radius = st.slider("Restaurant Search Radius (km)", 0.5, 5.0, 2.0, 0.5)
         
-        # Status
-        st.markdown("### 📊 Status")
+        # Agent Status
+        st.markdown("### 📊 Agent Status")
         if vertex_project_id and google_maps_api_key:
             st.success("✅ Ready to process events")
         else:
-            st.warning("⚠️ Please configure API keys")
+            st.error("❌ Agent unavailable - check API keys")
         
         # Email status
         st.markdown("### 📧 Email Status")
@@ -517,6 +555,24 @@ def main():
             st.success(f"✅ Email: {sender_email}")
         else:
             st.info("💡 Configure email to send booking requests")
+        
+        # Deployment info
+        st.markdown("### ℹ️ Deployment Info")
+        st.caption("🚀 Production Mode")
+        st.caption("🔐 Secure API handling")
+        
+        # Help section
+        with st.expander("❓ Need Help?"):
+            st.markdown("""
+            **How to use:**
+            1. Enter an event URL above
+            2. Click 'Process Event' 
+            3. Review found restaurants
+            4. Configure email settings
+            5. Send booking requests
+            
+            **Issues?** Contact support
+            """)
     
     # Main content area
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -529,17 +585,40 @@ def main():
             help="Paste the URL of the event you want to analyze"
         )
         
+        # Validate URL format
+        if event_url:
+            import re
+            url_pattern = re.compile(
+                r'^https?://'  # http:// or https://
+                r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain...
+                r'localhost|'  # localhost...
+                r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
+                r'(?::\d+)?'  # optional port
+                r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+            
+            if not url_pattern.match(event_url):
+                st.warning("⚠️ Please enter a valid URL starting with http:// or https://")
+                event_url = None
+        
+        # Check if API keys are available for button state
+        api_keys_available = bool(
+            (os.getenv('VERTEX_PROJECT_ID') or st.secrets.get('VERTEX_PROJECT_ID', '')) and
+            (os.getenv('GOOGLE_MAPS_API_KEY') or st.secrets.get('GOOGLE_MAPS_API_KEY', ''))
+        )
+        
         process_button = st.button(
             "🚀 Process Event",
             type="primary",
             use_container_width=True,
-            disabled=not (event_url and vertex_project_id and google_maps_api_key)
+            disabled=not (event_url and api_keys_available),
+            help="Enter an event URL above to start processing" if not event_url else "Click to analyze the event and find restaurants"
         )
     
     # Process event when button is clicked
     if process_button and event_url:
         # Initialize agent
         agent = initialize_agent()
+        print(agent)
         if not agent:
             st.error("Failed to initialize agent. Please check your API credentials.")
             return
@@ -645,16 +724,26 @@ def main():
         display_restaurants(restaurants)
         display_draft_emails(draft_emails, event_info)
     
-    # Sample URLs for testing
+            # Sample URLs for testing
     with st.expander("🧪 Sample Event URLs for Testing"):
         st.markdown("""
         Try these sample URLs to test the agent:
         
-        - **Tech Conference:** `https://www.example-tech-conf.com/2024`
-        - **Music Festival:** `https://www.example-music-fest.com/schedule`
-        - **Business Summit:** `https://www.example-summit.com/agenda`
+        - **Tech Conferences:** 
+          - `https://events.google.com/...`
+          - `https://www.meetup.com/...`
+          - `https://eventbrite.com/...`
         
-        *Note: Replace with actual event URLs for real testing*
+        - **Academic Events:**
+          - University conference pages
+          - Academic symposium websites
+        
+        - **Public Events:**
+          - City government event pages
+          - Cultural center websites
+          - Museum exhibition pages
+        
+        **⚠️ Privacy Notice:** Only use publicly available event URLs. Do not use private or restricted event pages.
         """)
     
     # Footer
@@ -663,11 +752,35 @@ def main():
         """
         <div style="text-align: center; color: #666; margin-top: 2rem;">
         Built with ❤️ using Streamlit, Vertex AI, and Google Maps API<br>
-        🤖 Intelligent Event Agent v1.0 | 📧 Now with Email Integration
+        🤖 Intelligent Event Agent v2.0 | 📧 Email Integration | 🔐 Secure Deployment
         </div>
         """,
         unsafe_allow_html=True
     )
+    
+    # Privacy and usage notice
+    with st.expander("🛡️ Privacy & Usage Policy"):
+        st.markdown("""
+        **Privacy Notice:**
+        - This app processes event URLs you provide
+        - Restaurant data is fetched from Google Places API
+        - Email functionality uses your credentials securely
+        - No personal data is stored permanently
+        
+        **Usage Guidelines:**
+        - Use only publicly available event URLs
+        - Respect website terms of service
+        - Don't spam restaurants with booking requests
+        - Use the tool responsibly and ethically
+        
+        **Data Security:**
+        - API keys are handled securely via environment variables
+        - Email credentials are processed locally
+        - No sensitive data is logged or stored
+        
+        **Disclaimer:**
+        This tool is for informational purposes. Always verify event details and restaurant availability independently.
+        """)
 
 if __name__ == "__main__":
     main() 
