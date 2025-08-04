@@ -23,6 +23,9 @@ os.environ["STREAMLIT_WATCHER_TYPE"] = "none"
 print(f"🔍 DEBUG: VERTEX_PROJECT_ID found: {bool(vertex_project_id)}")
 print(f"🔍 DEBUG: GOOGLE_MAPS_API_KEY found: {bool(google_maps_api_key)}")
 
+# Add visible logging to Streamlit interface
+# Note: st not available yet, will add after st.set_page_config
+
 # Check if we're in Streamlit Cloud
 is_streamlit_cloud = '/mount/src/' in os.getcwd()
 print(f"🔍 DEBUG: Running in Streamlit Cloud: {is_streamlit_cloud}")
@@ -103,6 +106,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Add visible debug info to the interface
+st.info("🔍 **Debug Mode Active** - Check Streamlit Cloud logs for detailed information")
 
 # Custom CSS for better styling
 st.markdown("""
