@@ -11,6 +11,31 @@ from dotenv import load_dotenv
 # Use override=True to ensure .env values take precedence over existing environment variables
 load_dotenv(override=True)
 
+# Add debugging information for deployment troubleshooting
+print("🔍 DEBUG: Starting Streamlit app...")
+print(f"🔍 DEBUG: Current working directory: {os.getcwd()}")
+print(f"🔍 DEBUG: Python path: {os.path.dirname(os.__file__)}")
+
+# Check environment variables with debugging
+vertex_project_id = os.getenv('VERTEX_PROJECT_ID')
+google_maps_api_key = os.getenv('GOOGLE_MAPS_API_KEY')
+print(f"🔍 DEBUG: VERTEX_PROJECT_ID found: {bool(vertex_project_id)}")
+print(f"🔍 DEBUG: GOOGLE_MAPS_API_KEY found: {bool(google_maps_api_key)}")
+
+# Check if we're in Streamlit Cloud
+is_streamlit_cloud = '/mount/src/' in os.getcwd()
+print(f"🔍 DEBUG: Running in Streamlit Cloud: {is_streamlit_cloud}")
+
+# Check Streamlit secrets availability
+try:
+    import streamlit as st_temp
+    print("🔍 DEBUG: Streamlit import successful")
+    # Note: st.secrets only available after st.set_page_config
+except Exception as e:
+    print(f"🔍 DEBUG: Streamlit import error: {e}")
+    
+print("🔍 DEBUG: Environment setup complete")
+
 # Handle Google Cloud authentication for Streamlit Cloud deployment
 try:
     # Force Google Cloud to NOT use metadata service in Streamlit Cloud
@@ -82,31 +107,53 @@ st.markdown("""
 
 def initialize_agent():
     """Initialize the EventAgent with API credentials."""
+    print("🔍 DEBUG: Starting agent initialization...")
+    
     # For production deployment, use environment variables only
     vertex_project_id = os.getenv('VERTEX_PROJECT_ID')
     google_maps_api_key = os.getenv('GOOGLE_MAPS_API_KEY')
     
+    print(f"🔍 DEBUG: Environment vars - Vertex: {bool(vertex_project_id)}, Maps: {bool(google_maps_api_key)}")
+    
     # In development mode, also check Streamlit secrets
-    if not vertex_project_id:
-        vertex_project_id = st.secrets.get('VERTEX_PROJECT_ID', '')
-    if not google_maps_api_key:
-        google_maps_api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
+    try:
+        if not vertex_project_id:
+            vertex_project_id = st.secrets.get('VERTEX_PROJECT_ID', '')
+            print(f"🔍 DEBUG: Got Vertex from secrets: {bool(vertex_project_id)}")
+        if not google_maps_api_key:
+            google_maps_api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
+            print(f"🔍 DEBUG: Got Maps from secrets: {bool(google_maps_api_key)}")
+    except Exception as e:
+        print(f"🔍 DEBUG: Error accessing secrets: {e}")
+        st.error(f"Error accessing Streamlit secrets: {e}")
     
     if not vertex_project_id or not google_maps_api_key:
+        error_msg = f"Missing credentials - Vertex: {bool(vertex_project_id)}, Maps: {bool(google_maps_api_key)}"
+        print(f"🔍 DEBUG: {error_msg}")
         st.error("🔐 **Configuration Required**")
         st.error("API credentials are not properly configured. Please contact the administrator.")
+        st.error(f"Debug info: {error_msg}")
         st.info("💡 **For administrators**: Set VERTEX_PROJECT_ID and GOOGLE_MAPS_API_KEY in your deployment environment.")
         return None
     
     try:
+        print("🔍 DEBUG: Attempting to create EventAgent...")
         agent = EventAgent(
             vertex_project_id=vertex_project_id,
             vertex_location='us-east1',  # Use supported region
             google_maps_api_key=google_maps_api_key
         )
+        print("🔍 DEBUG: EventAgent created successfully!")
         return agent
     except Exception as e:
-        st.error(f"Failed to initialize agent: {str(e)}")
+        error_msg = f"Failed to initialize agent: {str(e)}"
+        print(f"🔍 DEBUG: {error_msg}")
+        print(f"🔍 DEBUG: Exception type: {type(e)}")
+        import traceback
+        print(f"🔍 DEBUG: Full traceback: {traceback.format_exc()}")
+        st.error(error_msg)
+        st.error(f"Exception type: {type(e)}")
+        st.code(traceback.format_exc())
         return None
 
 def display_event_info(event_info):
