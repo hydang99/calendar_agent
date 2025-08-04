@@ -655,19 +655,34 @@ class EventAgent:
         Returns:
             Dictionary containing extracted event information
         """
-        # First try with Selenium (for dynamic content)
-        try:
-            return self._extract_with_selenium(url)
-        except Exception as selenium_error:
-            print(f"Selenium extraction failed: {selenium_error}")
-            print("Falling back to simple HTTP request...")
-            
-            # Fallback to simple requests
+        # Detect cloud environment - Selenium often fails in cloud deployments
+        import os
+        is_cloud = any(key in os.environ for key in ['STREAMLIT_SHARING_MODE', 'STREAMLIT_CLOUD']) or \
+                  'share.streamlit.io' in os.environ.get('HTTP_HOST', '') or \
+                  '/app' in os.getcwd()
+        
+        if is_cloud:
+            print("☁️ Cloud environment detected - using requests-only extraction")
             try:
                 return self._extract_with_requests(url)
             except Exception as requests_error:
-                print(f"Requests extraction also failed: {requests_error}")
-                return {"error": f"All extraction methods failed. Selenium: {selenium_error}, Requests: {requests_error}"}
+                print(f"Requests extraction failed: {requests_error}")
+                return {"error": f"Content extraction failed in cloud environment: {requests_error}"}
+        else:
+            print("💻 Local environment - trying Selenium first")
+            # First try with Selenium (for dynamic content)
+            try:
+                return self._extract_with_selenium(url)
+            except Exception as selenium_error:
+                print(f"Selenium extraction failed: {selenium_error}")
+                print("Falling back to simple HTTP request...")
+                
+                # Fallback to simple requests
+                try:
+                    return self._extract_with_requests(url)
+                except Exception as requests_error:
+                    print(f"Requests extraction also failed: {requests_error}")
+                    return {"error": f"All extraction methods failed. Selenium: {selenium_error}, Requests: {requests_error}"}
     
     def _extract_with_selenium(self, url: str) -> Dict[str, any]:
         """Extract using Selenium WebDriver."""
