@@ -655,33 +655,58 @@ class EventAgent:
         Returns:
             Dictionary containing extracted event information
         """
-        # Detect cloud environment - Selenium often fails in cloud deployments
+        # Enhanced cloud environment detection
         import os
-        is_cloud = any(key in os.environ for key in ['STREAMLIT_SHARING_MODE', 'STREAMLIT_CLOUD']) or \
-                  'share.streamlit.io' in os.environ.get('HTTP_HOST', '') or \
-                  '/app' in os.getcwd()
+        import platform
         
+        # Multiple ways to detect cloud/containerized environments
+        cloud_indicators = [
+            'STREAMLIT_SHARING_MODE' in os.environ,
+            'STREAMLIT_CLOUD' in os.environ,
+            'share.streamlit.io' in os.environ.get('HTTP_HOST', ''),
+            '/app' in os.getcwd(),
+            platform.system() == 'Linux' and not os.path.exists('/usr/bin/google-chrome'),
+            'KUBERNETES_SERVICE_HOST' in os.environ,
+            'DYNO' in os.environ,  # Heroku
+            'RENDER' in os.environ,  # Render
+        ]
+        
+        is_cloud = any(cloud_indicators)
+        
+        print(f"🔍 Environment check:")
+        print(f"   Platform: {platform.system()}")
+        print(f"   CWD: {os.getcwd()}")
+        print(f"   Cloud indicators: {sum(cloud_indicators)}/8")
+        print(f"   Is cloud: {is_cloud}")
+        
+        # Always try requests first in cloud environments, or if Chrome is not available
         if is_cloud:
             print("☁️ Cloud environment detected - using requests-only extraction")
             try:
                 return self._extract_with_requests(url)
             except Exception as requests_error:
-                print(f"Requests extraction failed: {requests_error}")
+                print(f"❌ Requests extraction failed: {requests_error}")
                 return {"error": f"Content extraction failed in cloud environment: {requests_error}"}
         else:
             print("💻 Local environment - trying Selenium first")
-            # First try with Selenium (for dynamic content)
+            # First try with Selenium (for dynamic content)  
             try:
+                # Quick Chrome availability check
+                import shutil
+                if not shutil.which('google-chrome') and not shutil.which('chromium'):
+                    print("⚠️ Chrome not found, falling back to requests")
+                    return self._extract_with_requests(url)
+                
                 return self._extract_with_selenium(url)
             except Exception as selenium_error:
-                print(f"Selenium extraction failed: {selenium_error}")
-                print("Falling back to simple HTTP request...")
+                print(f"❌ Selenium extraction failed: {selenium_error}")
+                print("🔄 Falling back to HTTP requests...")
                 
                 # Fallback to simple requests
                 try:
                     return self._extract_with_requests(url)
                 except Exception as requests_error:
-                    print(f"Requests extraction also failed: {requests_error}")
+                    print(f"❌ Requests extraction also failed: {requests_error}")
                     return {"error": f"All extraction methods failed. Selenium: {selenium_error}, Requests: {requests_error}"}
     
     def _extract_with_selenium(self, url: str) -> Dict[str, any]:
@@ -729,26 +754,57 @@ class EventAgent:
     
     def _extract_with_requests(self, url: str) -> Dict[str, any]:
         """Fallback extraction using simple HTTP requests."""
+        print(f"🌐 Starting HTTP extraction for: {url}")
+        
         # Normalize URL
         url = self._normalize_url(url)
+        print(f"🔗 Normalized URL: {url}")
         
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
         }
         
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        text_content = soup.get_text(separator=' ', strip=True)
-        
-        # Extract basic info
-        event_info = self._extract_basic_info(soup, text_content)
-        
-        # Use AI to process if available
-        structured_info = self._process_with_ai(text_content, event_info)
-        
-        return structured_info
+        try:
+            print("📡 Sending HTTP request...")
+            response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+            print(f"✅ HTTP response: {response.status_code}")
+            response.raise_for_status()
+            
+            print("🔍 Parsing HTML content...")
+            soup = BeautifulSoup(response.content, 'html.parser')
+            text_content = soup.get_text(separator=' ', strip=True)
+            print(f"📄 Content length: {len(text_content)} characters")
+            
+            if len(text_content) < 100:
+                print("⚠️ Very short content - might be blocked or empty")
+                return {"error": "Retrieved content is too short - possible blocking or empty page"}
+            
+            # Extract basic info
+            print("🔍 Extracting basic information...")
+            event_info = self._extract_basic_info(soup, text_content)
+            
+            # Use AI to process if available
+            if hasattr(self, 'llm') and self.llm:
+                print("🤖 Processing with AI...")
+                structured_info = self._process_with_ai(text_content, event_info)
+                print("✅ AI processing completed")
+                return structured_info
+            else:
+                print("⚠️ AI not available, returning basic extraction")
+                return event_info
+                
+        except requests.exceptions.Timeout:
+            return {"error": "Request timed out - website took too long to respond"}
+        except requests.exceptions.ConnectionError:
+            return {"error": "Connection failed - check internet connection or website availability"}
+        except requests.exceptions.HTTPError as e:
+            return {"error": f"HTTP error {e.response.status_code}: {str(e)}"}
+        except Exception as e:
+            return {"error": f"Unexpected error during HTTP extraction: {str(e)}"}
     
     def _extract_basic_info(self, soup: BeautifulSoup, text_content: str) -> Dict[str, any]:
         """Extract basic event information using CSS selectors and text patterns."""

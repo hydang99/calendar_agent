@@ -633,7 +633,29 @@ def main():
             progress_bar.progress(25)
             
             with st.spinner("Analyzing event page..."):
-                event_info = agent.extract_event_info(event_url)
+                try:
+                    # Add debug info for cloud deployments
+                    st.info("🔍 **Debug Info** (remove this later)")
+                    import os
+                    import platform
+                    debug_info = f"""
+                    - Platform: {platform.system()}
+                    - Working Directory: {os.getcwd()}
+                    - Environment: {'Cloud' if any(key in os.environ for key in ['STREAMLIT_SHARING_MODE', 'STREAMLIT_CLOUD']) else 'Local'}
+                    """
+                    st.code(debug_info)
+                    
+                    event_info = agent.extract_event_info(event_url)
+                    
+                    if 'error' in event_info:
+                        st.error(f"❌ Event extraction failed: {event_info['error']}")
+                        st.stop()
+                        
+                except Exception as e:
+                    st.error(f"❌ Unexpected error during event extraction: {str(e)}")
+                    st.error(f"Error type: {type(e).__name__}")
+                    st.code(f"Full error: {repr(e)}")
+                    st.stop()
             
             if 'error' in event_info:
                 st.error(f"Failed to extract event information: {event_info['error']}")
