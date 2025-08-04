@@ -38,13 +38,34 @@ print("🔍 DEBUG: Environment setup complete")
 
 # Handle Google Cloud authentication for Streamlit Cloud deployment
 try:
-    # Force Google Cloud to NOT use metadata service in Streamlit Cloud
-    # This prevents the 503 metadata service error  
+    # Check if we're in Streamlit Cloud and handle service account credentials
     if '/mount/src/' in os.getcwd():
-        # We're in Streamlit Cloud - disable metadata service
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = ""
-        os.environ["GOOGLE_CLOUD_PROJECT"] = os.getenv('VERTEX_PROJECT_ID', '')
-        print("🔧 Streamlit Cloud detected - disabled metadata service")
+        print("🔧 Streamlit Cloud detected - setting up authentication")
+        
+        # Try to use service account from secrets
+        try:
+            import streamlit as st_temp
+            if hasattr(st_temp, 'secrets') and "gcp_service_account" in st_temp.secrets:
+                import json
+                from google.oauth2 import service_account
+                
+                # Write service account to file for Vertex AI
+                credentials_info = dict(st_temp.secrets["gcp_service_account"])
+                with open("/tmp/gcp_credentials.json", "w") as f:
+                    json.dump(credentials_info, f)
+                
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/gcp_credentials.json"
+                os.environ["GOOGLE_CLOUD_PROJECT"] = credentials_info.get("project_id", os.getenv('VERTEX_PROJECT_ID', ''))
+                print("✅ Service account credentials configured from secrets")
+            else:
+                print("⚠️ No service account found in secrets, using environment variables only")
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = ""
+                os.environ["GOOGLE_CLOUD_PROJECT"] = os.getenv('VERTEX_PROJECT_ID', '')
+        except Exception as secret_error:
+            print(f"⚠️ Could not load service account from secrets: {secret_error}")
+            # Fallback to environment variables
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = ""
+            os.environ["GOOGLE_CLOUD_PROJECT"] = os.getenv('VERTEX_PROJECT_ID', '')
         
 except Exception as auth_error:
     # Log but don't fail - will fall back to environment variables

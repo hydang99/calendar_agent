@@ -1087,7 +1087,6 @@ class EventAgent:
         5. Return valid JSON only - no extra text or explanations
         6. If multiple events are listed, focus on the main/featured event
         """
-        print(prompt)
         try:
             print("🔍 Sending content to AI for analysis...")
             response = self.llm.invoke(prompt)
