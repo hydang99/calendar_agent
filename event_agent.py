@@ -898,7 +898,7 @@ class EventAgent:
             for selector in nav_selectors:
                 try:
                     links = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                    for link in links[:2]:  # Limit to first 2 links to avoid too much exploration
+                    for link in links[:4]:  # Limit to first 2 links to avoid too much exploration
                         try:
                             link_text = link.text.lower()
                             if any(keyword in link_text for keyword in ['agenda', 'schedule', 'location', 'venue', 'details']):
@@ -919,9 +919,9 @@ class EventAgent:
                                 text_content = soup.get_text(separator=' ', strip=True)
                                 
                                 if 'agenda' in link_text or 'schedule' in link_text:
-                                    additional_info['agenda_content'] = text_content[:2000]  # Limit content
+                                    additional_info['agenda_content'] = text_content[:20000]  # Limit content
                                 elif 'location' in link_text or 'venue' in link_text:
-                                    additional_info['location_content'] = text_content[:2000]
+                                    additional_info['location_content'] = text_content[:20000]
                                 
                                 # Go back to original page
                                 self.driver.get(original_url)
@@ -1009,7 +1009,7 @@ class EventAgent:
         CRITICAL: Focus especially on LOCATION information as this is essential for finding nearby restaurants.
 
         Web page content:
-        {text_content[:8000]}
+        {text_content}
 
         Previously extracted basic info:
         {json.dumps(basic_info, indent=2)}
