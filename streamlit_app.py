@@ -28,6 +28,13 @@ try:
         
         # Set environment variable for Google Cloud libraries
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "service-account-key.json"
+    else:
+        # Force Google Cloud to NOT use metadata service in Streamlit Cloud
+        # This prevents the 503 metadata service error
+        if any(key in os.environ for key in ['STREAMLIT_SHARING_MODE', 'STREAMLIT_CLOUD']) or '/mount/src/' in os.getcwd():
+            # We're in Streamlit Cloud - disable metadata service
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = ""
+            os.environ["GOOGLE_CLOUD_PROJECT"] = os.getenv('VERTEX_PROJECT_ID', '')
         
 except ImportError:
     # google.oauth2 not available - will use environment-based auth
@@ -35,6 +42,14 @@ except ImportError:
 except Exception as auth_error:
     # Log but don't fail - will fall back to environment variables
     print(f"Note: Service account setup failed, using environment auth: {auth_error}")
+    
+    # Still try to disable metadata service in cloud
+    try:
+        if '/mount/src/' in os.getcwd():
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = ""
+            os.environ["GOOGLE_CLOUD_PROJECT"] = os.getenv('VERTEX_PROJECT_ID', '')
+    except:
+        pass
 
 # Set page config
 st.set_page_config(
@@ -636,7 +651,6 @@ def main():
                 try:
                     # Add debug info for cloud deployments
                     st.info("🔍 **Debug Info** (remove this later)")
-                    import os
                     import platform
                     debug_info = f"""
                     - Platform: {platform.system()}

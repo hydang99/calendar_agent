@@ -55,6 +55,10 @@ class EventAgent:
         # Initialize Vertex AI
         if self.vertex_project_id:
             try:
+                # Explicitly set project for Google Cloud libraries
+                import os
+                os.environ["GOOGLE_CLOUD_PROJECT"] = self.vertex_project_id
+                
                 # Initialize with just project and location - staging bucket is optional
                 if self.bucket_name:
                     vertexai.init(project=self.vertex_project_id, location=self.vertex_location, staging_bucket=f"gs://{self.bucket_name}")
@@ -78,6 +82,26 @@ class EventAgent:
                         break
                     except Exception as model_error:
                         print(f"⚠️ Model {model_name} not available: {model_error}")
+                        # Try to handle auth issues specifically
+                        if "metadata" in str(model_error).lower() or "503" in str(model_error):
+                            print("🔧 Detected metadata service issue, trying alternative auth...")
+                            try:
+                                # Force no credentials to use environment variable approach
+                                original_creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+                                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = ""
+                                self.llm = VertexAI(
+                                    model_name=model_name,
+                                    project=self.vertex_project_id,
+                                    location=self.vertex_location,
+                                    temperature=0.3
+                                )
+                                print(f"✅ Successfully initialized Vertex AI with alternative auth: {model_name}")
+                                break
+                            except Exception as alt_error:
+                                print(f"❌ Alternative auth also failed: {alt_error}")
+                                # Restore original credentials
+                                if original_creds:
+                                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = original_creds
                         continue
                 
                 if self.llm is None:
