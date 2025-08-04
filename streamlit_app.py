@@ -45,20 +45,44 @@ try:
         # Try to use service account from secrets
         try:
             import streamlit as st_temp
-            if hasattr(st_temp, 'secrets') and "gcp_service_account" in st_temp.secrets:
-                import json
-                from google.oauth2 import service_account
-                
-                # Write service account to file for Vertex AI
-                credentials_info = dict(st_temp.secrets["gcp_service_account"])
-                with open("/tmp/gcp_credentials.json", "w") as f:
-                    json.dump(credentials_info, f)
-                
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/gcp_credentials.json"
-                os.environ["GOOGLE_CLOUD_PROJECT"] = credentials_info.get("project_id", os.getenv('VERTEX_PROJECT_ID', ''))
-                print("✅ Service account credentials configured from secrets")
+            if hasattr(st_temp, 'secrets'):
+                # Check for Streamlit's built-in Google Cloud integration
+                if "GOOGLE_APPLICATION_CREDENTIALS_JSON" in st_temp.secrets:
+                    import json
+                    import tempfile
+                    
+                    # Parse the JSON string and write to temporary file
+                    credentials_json = st_temp.secrets["GOOGLE_APPLICATION_CREDENTIALS_JSON"]
+                    credentials_info = json.loads(credentials_json)
+                    
+                    # Create temporary file for Vertex AI
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                        json.dump(credentials_info, f)
+                        temp_credentials_path = f.name
+                    
+                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_credentials_path
+                    os.environ["GOOGLE_CLOUD_PROJECT"] = credentials_info.get("project_id", os.getenv('VERTEX_PROJECT_ID', ''))
+                    print("✅ Service account credentials configured from GOOGLE_APPLICATION_CREDENTIALS_JSON")
+                    
+                # Also check for the traditional gcp_service_account format
+                elif "gcp_service_account" in st_temp.secrets:
+                    import json
+                    from google.oauth2 import service_account
+                    
+                    # Write service account to file for Vertex AI
+                    credentials_info = dict(st_temp.secrets["gcp_service_account"])
+                    with open("/tmp/gcp_credentials.json", "w") as f:
+                        json.dump(credentials_info, f)
+                    
+                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/tmp/gcp_credentials.json"
+                    os.environ["GOOGLE_CLOUD_PROJECT"] = credentials_info.get("project_id", os.getenv('VERTEX_PROJECT_ID', ''))
+                    print("✅ Service account credentials configured from gcp_service_account")
+                else:
+                    print("⚠️ No service account found in secrets, using environment variables only")
+                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = ""
+                    os.environ["GOOGLE_CLOUD_PROJECT"] = os.getenv('VERTEX_PROJECT_ID', '')
             else:
-                print("⚠️ No service account found in secrets, using environment variables only")
+                print("⚠️ No secrets available, using environment variables only")
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = ""
                 os.environ["GOOGLE_CLOUD_PROJECT"] = os.getenv('VERTEX_PROJECT_ID', '')
         except Exception as secret_error:
@@ -138,9 +162,21 @@ def initialize_agent():
     
     # In development mode, also check Streamlit secrets
     try:
+        # Try to get project ID from service account credentials first
+        if not vertex_project_id and "GOOGLE_APPLICATION_CREDENTIALS_JSON" in st.secrets:
+            try:
+                import json
+                credentials_info = json.loads(st.secrets["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+                vertex_project_id = credentials_info.get("project_id", "")
+                print(f"🔍 DEBUG: Got Vertex project from service account: {bool(vertex_project_id)}")
+            except Exception as e:
+                print(f"🔍 DEBUG: Error parsing service account JSON: {e}")
+        
+        # Fallback to explicit VERTEX_PROJECT_ID
         if not vertex_project_id:
             vertex_project_id = st.secrets.get('VERTEX_PROJECT_ID', '')
-            print(f"🔍 DEBUG: Got Vertex from secrets: {bool(vertex_project_id)}")
+            print(f"🔍 DEBUG: Got Vertex from explicit secrets: {bool(vertex_project_id)}")
+            
         if not google_maps_api_key:
             google_maps_api_key = st.secrets.get('GOOGLE_MAPS_API_KEY', '')
             print(f"🔍 DEBUG: Got Maps from secrets: {bool(google_maps_api_key)}")
