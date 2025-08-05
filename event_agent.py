@@ -784,16 +784,37 @@ class EventAgent:
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Cache-Control': 'max-age=0',
         }
         
         try:
             print("📡 Sending HTTP request...")
             response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
             print(f"✅ HTTP response: {response.status_code}")
+            
+            # Handle 405 error specifically
+            if response.status_code == 405:
+                print("⚠️ 405 Method Not Allowed - trying with POST method...")
+                try:
+                    response = requests.post(url, headers=headers, timeout=15, allow_redirects=True)
+                    print(f"✅ POST response: {response.status_code}")
+                except Exception as post_error:
+                    print(f"❌ POST also failed: {post_error}")
+                    return {"error": f"Website requires different HTTP method. Status: {response.status_code}"}
+            
+            # Handle other non-success status codes
+            if response.status_code >= 400:
+                print(f"⚠️ HTTP {response.status_code} - trying to extract content anyway...")
+                # Don't raise_for_status() yet, try to parse content first
+                
             response.raise_for_status()
             
             print("🔍 Parsing HTML content...")
@@ -824,7 +845,27 @@ class EventAgent:
         except requests.exceptions.ConnectionError:
             return {"error": "Connection failed - check internet connection or website availability"}
         except requests.exceptions.HTTPError as e:
-            return {"error": f"HTTP error {e.response.status_code}: {str(e)}"}
+            error_msg = f"HTTP error {e.response.status_code}: {str(e)}"
+            print(f"❌ {error_msg}")
+            
+            # Try alternative URLs for 405 and 404 errors
+            if e.response.status_code in [404, 405]:
+                print("🔄 Trying alternative URL patterns...")
+                alternative_urls = self._try_alternative_urls(url)
+                
+                for alt_url in alternative_urls[:3]:  # Try first 3 alternatives
+                    try:
+                        print(f"🔄 Trying: {alt_url}")
+                        alt_response = requests.get(alt_url, headers=headers, timeout=10, allow_redirects=True)
+                        if alt_response.status_code == 200:
+                            print(f"✅ Alternative URL worked: {alt_url}")
+                            # Recursively call this method with the working URL
+                            return self._extract_with_requests(alt_url)
+                    except Exception as alt_error:
+                        print(f"❌ Alternative URL failed: {alt_url} - {alt_error}")
+                        continue
+            
+            return {"error": error_msg}
         except Exception as e:
             return {"error": f"Unexpected error during HTTP extraction: {str(e)}"}
     
@@ -949,6 +990,29 @@ class EventAgent:
             url = 'https://' + url
         
         return url
+    
+    def _try_alternative_urls(self, original_url: str) -> list:
+        """Try alternative URL patterns if the original fails."""
+        print(f"🔄 Generating alternative URL patterns for: {original_url}")
+        
+        # Common patterns to try
+        alternatives = [
+            original_url.rstrip('/'),
+            original_url + '/',
+            original_url.replace('https://', 'http://'),
+            original_url.replace('http://', 'https://'),
+        ]
+        
+        # For specific domains, try common paths
+        if 'wbresearch.com' in original_url:
+            alternatives.extend([
+                original_url + '/events',
+                original_url + '/event',
+                original_url + '/about',
+                original_url + '/home',
+            ])
+        
+        return alternatives
     
     def _build_full_address(self, event_info: Dict) -> str:
         """Build a complete address from components."""
