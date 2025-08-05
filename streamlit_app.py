@@ -110,6 +110,29 @@ st.set_page_config(
 # Add visible debug info to the interface
 st.info("🔍 **Debug Mode Active** - Check Streamlit Cloud logs for detailed information")
 
+# Streamlit Cloud specific debugging
+if '/mount/src/' in os.getcwd():
+    st.warning("🚨 **Streamlit Cloud Environment Detected**")
+    st.info("""
+    **Common Streamlit Cloud Issues:**
+    - Network restrictions on outbound requests
+    - Some websites block cloud IPs
+    - Different environment variables
+    
+    **Debug Steps:**
+    1. Check Streamlit Cloud logs for detailed error messages
+    2. Verify API credentials are set in Streamlit secrets
+    3. Try a different test URL
+    """)
+    
+    # Test basic connectivity
+    try:
+        import requests
+        test_response = requests.get('https://httpbin.org/status/200', timeout=5)
+        st.success(f"✅ Basic connectivity test: {test_response.status_code}")
+    except Exception as e:
+        st.error(f"❌ Connectivity test failed: {e}")
+
 # Custom CSS for better styling
 st.markdown("""
 <style>
@@ -845,6 +868,44 @@ def main():
           - Museum exhibition pages
         
         **⚠️ Privacy Notice:** Only use publicly available event URLs. Do not use private or restricted event pages.
+        """)
+    
+    # Streamlit Cloud debugging section
+    with st.expander("🔧 Streamlit Cloud Debug Tools"):
+        st.markdown("### Test Connectivity")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🌐 Test Basic Connectivity"):
+                try:
+                    import requests
+                    response = requests.get('https://httpbin.org/status/200', timeout=5)
+                    st.success(f"✅ Basic connectivity: {response.status_code}")
+                except Exception as e:
+                    st.error(f"❌ Connectivity failed: {e}")
+        
+        with col2:
+            if st.button("🔍 Test Target Website"):
+                test_url = "https://etaileast.wbresearch.com/"
+                try:
+                    import requests
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                    response = requests.get(test_url, headers=headers, timeout=10)
+                    st.success(f"✅ Target site: {response.status_code}")
+                    if response.status_code != 200:
+                        st.warning(f"⚠️ Non-200 response: {response.status_code}")
+                except Exception as e:
+                    st.error(f"❌ Target site failed: {e}")
+        
+        st.markdown("### Environment Info")
+        st.code(f"""
+        Working Directory: {os.getcwd()}
+        Environment: {'Streamlit Cloud' if '/mount/src/' in os.getcwd() else 'Local'}
+        Vertex Project ID: {os.getenv('VERTEX_PROJECT_ID', 'Not set')}
+        Maps API Key: {os.getenv('GOOGLE_MAPS_API_KEY', 'Not set')}
         """)
     
     # Footer
